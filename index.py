@@ -20,7 +20,7 @@ start_time = time.time()
 
 def main() -> None:
     loop = asyncio.get_event_loop()
-    file_name: str = "result.csv"
+    file_name: str = "result_1.csv"
     crawl_object = Crawl()
     is_created: bool = crawl_object.crawl_and_save(word="Banjir Jakarta", file_name=file_name)
 
@@ -36,7 +36,7 @@ def main() -> None:
         df_filtered_object: pd.DataFrame = df_filtered_object.filter_unused_character(df=df)
 
         print(df_filtered_object.head())
-        df_filtered_object.to_csv("result_filtering.csv")
+        df_filtered_object.to_csv("result_2_filtering.csv")
         
         # Sastrawi
         stopword = StopWordRemoverFactory().create_stop_word_remover()
@@ -65,7 +65,7 @@ def main() -> None:
         # df_filtered_object["tweet"] = list_tweet_stemming
 
         # Save Stemming
-        df_filtered_object.to_csv(path_or_buf="result_stemming.csv")
+        df_filtered_object.to_csv(path_or_buf="result_3_stemming.csv")
 
         # Count Most Word
         combined_word : str = None
@@ -78,13 +78,49 @@ def main() -> None:
 
         import matplotlib.pyplot as plt
 
-        x_val = [x[0] for x in counter_result_most_common]
-        y_val = [x[1] for x in counter_result_most_common]
-        plt.plot(x_val,y_val)
-        plt.plot(x_val,y_val,'or')
+        # x_val = [x[0] for x in counter_result_most_common]
+        # y_val = [x[1] for x in counter_result_most_common]
+        # plt.plot(x_val,y_val)
+        # plt.plot(x_val,y_val,'or')
+        # plt.show()
+
+
+        #labeling
+        positive = pd.read_csv(filepath_or_buffer="./positif.txt", header=None)
+        positive = positive[0].values.tolist()
+        positive = '|'.join(positive)
+
+        negative = pd.read_csv(filepath_or_buffer='./negatif.txt', header=None)
+        negative = negative[0].values.tolist()
+        negative = '|'.join(negative)
+        # print(negative)
+
+        df_filtered_object['positif'] = [len(re.findall(positive, x.lower())) / len(x.split()) for x in df_filtered_object["tweet"]]
+        df_filtered_object['negatif'] = [len(re.findall(negative, x.lower())) / len(x.split()) for x in df_filtered_object["tweet"]]
+        df_filtered_object.to_csv(path_or_buf="result_4_labeling.csv")
+
+
+        import matplotlib.pyplot as plt
+
+        # total_negative_tweets = df_filtered_object['positif'].shape[0]
+        # total_positive_tweets = df_filtered_object['negatif'].shape[0]
+        # print(total_negative_tweets)
+        # print(total_positive_tweets)
+        # a = [x for x in total_negative_tweets if t < 20]
+        total_negative_tweets: int = len([x for x in df_filtered_object['negatif'] if x >= 0.1])
+        total_positive_tweets: int = len([x for x in df_filtered_object['positif'] if x >= 0.1])
+        print(total_negative_tweets)
+        print(total_positive_tweets)
+        total_tweets = df.shape[0]
+
+        df_bar = pd.Series(data=[total_negative_tweets, total_positive_tweets],
+                    index=['Negatif ' + str(total_negative_tweets), 
+                            'Positif ' + str(total_positive_tweets)])
+
+        barnya = plt.bar(df_bar.index, df_bar.values)
+        barnya[0].set_color('#ff0000')
+        barnya[1].set_color('#0000ff')
         plt.show()
-
-
 if __name__ == "__main__":
     main()
 
