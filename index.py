@@ -12,36 +12,41 @@ import pandas as pd
 from typing import List
 import time
 import asyncio
-from collections import Counter 
+from collections import Counter
 
 start_time = time.time()
-
 
 
 def main() -> None:
     loop = asyncio.get_event_loop()
     file_name: str = "result_1.csv"
     crawl_object = Crawl()
-    is_created: bool = crawl_object.crawl_and_save(word="Banjir Jakarta", file_name=file_name)
+    is_created: bool = crawl_object.crawl_and_save(
+        word="Banjir Jakarta",
+        file_name=file_name,
+        since="2020-01-01 00:00:00",
+        until="2020-08-08 00:00:00",
+    )
 
     if is_created:
         df = pd.read_csv(file_name)
-        df.drop_duplicates(subset ="tweet", 
-                    keep = False, inplace = True) 
+        df.drop_duplicates(subset="tweet", keep=False, inplace=True)
         print("==========================")
         df["tweet"] = df["tweet"].str.lower()
         df.to_csv("result_preprocess.csv")
 
         df_filtered_object = Filter()
-        df_filtered_object: pd.DataFrame = df_filtered_object.filter_unused_character(df=df)
+        df_filtered_object: pd.DataFrame = df_filtered_object.filter_unused_character(
+            df=df
+        )
 
         print(df_filtered_object.head())
         df_filtered_object.to_csv("result_2_filtering.csv")
-        
+
         # Sastrawi
         stopword = StopWordRemoverFactory().create_stop_word_remover()
         stemmer = StemmerFactory().create_stemmer()
-        
+
         filter_common_word_obj = Filter()
         # Replacement Tweet Common word
         list_tweet_replaced_with_common_word: List[str] = list()
@@ -68,7 +73,7 @@ def main() -> None:
         df_filtered_object.to_csv(path_or_buf="result_3_stemming.csv")
 
         # Count Most Word
-        combined_word : str = None
+        combined_word: str = None
         for x in df_filtered_object["tweet"]:
             combined_word = str(combined_word) + x
 
@@ -84,21 +89,25 @@ def main() -> None:
         # plt.plot(x_val,y_val,'or')
         # plt.show()
 
-
-        #labeling
+        # labeling
         positive = pd.read_csv(filepath_or_buffer="./positif.txt", header=None)
         positive = positive[0].values.tolist()
-        positive = '|'.join(positive)
+        positive = "|".join(positive)
 
-        negative = pd.read_csv(filepath_or_buffer='./negatif.txt', header=None)
+        negative = pd.read_csv(filepath_or_buffer="./negatif.txt", header=None)
         negative = negative[0].values.tolist()
-        negative = '|'.join(negative)
+        negative = "|".join(negative)
         # print(negative)
 
-        df_filtered_object['positif'] = [len(re.findall(positive, x.lower())) / len(x.split()) for x in df_filtered_object["tweet"]]
-        df_filtered_object['negatif'] = [len(re.findall(negative, x.lower())) / len(x.split()) for x in df_filtered_object["tweet"]]
+        df_filtered_object["positif"] = [
+            len(re.findall(positive, x.lower())) / len(x.split())
+            for x in df_filtered_object["tweet"]
+        ]
+        df_filtered_object["negatif"] = [
+            len(re.findall(negative, x.lower())) / len(x.split())
+            for x in df_filtered_object["tweet"]
+        ]
         df_filtered_object.to_csv(path_or_buf="result_4_labeling.csv")
-
 
         import matplotlib.pyplot as plt
 
@@ -107,20 +116,30 @@ def main() -> None:
         # print(total_negative_tweets)
         # print(total_positive_tweets)
         # a = [x for x in total_negative_tweets if t < 20]
-        total_negative_tweets: int = len([x for x in df_filtered_object['negatif'] if x >= 0.1])
-        total_positive_tweets: int = len([x for x in df_filtered_object['positif'] if x >= 0.1])
+        total_negative_tweets: int = len(
+            [x for x in df_filtered_object["negatif"] if x >= 0.1]
+        )
+        total_positive_tweets: int = len(
+            [x for x in df_filtered_object["positif"] if x >= 0.1]
+        )
         print(total_negative_tweets)
         print(total_positive_tweets)
         total_tweets = df.shape[0]
 
-        df_bar = pd.Series(data=[total_negative_tweets, total_positive_tweets],
-                    index=['Negatif ' + str(total_negative_tweets), 
-                            'Positif ' + str(total_positive_tweets)])
+        df_bar = pd.Series(
+            data=[total_negative_tweets, total_positive_tweets],
+            index=[
+                "Negatif " + str(total_negative_tweets),
+                "Positif " + str(total_positive_tweets),
+            ],
+        )
 
         barnya = plt.bar(df_bar.index, df_bar.values)
-        barnya[0].set_color('#ff0000')
-        barnya[1].set_color('#0000ff')
+        barnya[0].set_color("#ff0000")
+        barnya[1].set_color("#0000ff")
         plt.show()
+
+
 if __name__ == "__main__":
     main()
 
