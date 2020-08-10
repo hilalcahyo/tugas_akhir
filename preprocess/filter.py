@@ -8,6 +8,7 @@ class Filter:
         pass
 
     def filter_unused_character(self, df: pd.DataFrame = None) -> pd.DataFrame:
+        print("ccccc", df)
         df["tweet"] = df["tweet"].str.replace("(https?://[\w\.\/]*)", "")  # http
         df["tweet"] = df["tweet"].str.replace(
             "(?:&(?:lt|nbsp|amp|gt);)", ""
@@ -21,7 +22,10 @@ class Filter:
         df["tweet"] = df["tweet"].str.replace("\s{2,}", " ")  # spasi lebih dari 2
         df["tweet"] = df["tweet"].str.replace("^rt.*", "")  # Remove RT tweet
         df["tweet"] = df["tweet"].str.replace("\.\.", " ")
-        df.dropna(subset=["tweet"], inplace=True)  # Remove Empty cell
+        df["tweet"] = df["tweet"].str.replace(
+            "pictwittercom", ""
+        )  # remove pictwittercom
+        # df.dropna(subset=["tweet"], inplace=True)  # Remove Empty cell
         return df
 
     def replace_common_word(self, tweet: str = None) -> str:

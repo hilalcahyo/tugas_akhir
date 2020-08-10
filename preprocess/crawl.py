@@ -28,6 +28,7 @@ class Crawl:
             c.Limit = limit
             c.Store_csv = True
             c.Output = file_name
+            c.Hide_output = True
 
             # Run
             twint.run.Search(c)
