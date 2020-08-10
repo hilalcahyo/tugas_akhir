@@ -2,6 +2,24 @@
 
 This app can analyze sentiment twitter(for example: "Banjir Jakarta")
 
+## To Do
+- [x] Crawling
+- [x] Drop Duplicate
+- [x] Filter Unused Character
+- [x] Normalize Common Word
+- [x] Stop Word Remove
+- [x] Stemming using multiprocess
+- [x] Count Most Word
+- [x] Labelling Tweets With Positive, Negative, And Neutral Sentiment
+- [x] Draw A Graph Of Common Word
+- [x] Draw A Graph Of Sentiment
+- [ ] Bag Of Word Model
+- [ ] Bernoulli Naive Bayes Model Train
+- [ ] Classification Comparation
+- [ ] WordCloud
+- [ ] Bernoulli Predict
+- [ ] Visualtation Of Bernoulli Predict
+
 ## Getting Started
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
