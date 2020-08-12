@@ -1,6 +1,7 @@
 from typing import List
 import re
 import pandas as pd
+from nltk.corpus import stopwords
 
 
 class Filter:
@@ -57,3 +58,7 @@ class Filter:
         data = re.sub(r"\bkzl\b|\bkesal\b", "kesel", data)
 
         return data
+
+    def remove_stop_words(self, tokens: List[List[str]] = list()) -> List[List[str]]:
+        stoplist: List[str] = stopwords.words("indonesian")
+        return [tweet for tweet in tokens if tweet not in stoplist]

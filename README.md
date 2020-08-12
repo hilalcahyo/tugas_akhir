@@ -13,12 +13,12 @@ This app can analyze sentiment twitter(for example: "Banjir Jakarta")
 - [x] Labelling Tweets With Positive, Negative, And Neutral Sentiment
 - [x] Draw A Graph Of Common Word
 - [x] Draw A Graph Of Sentiment
-- [ ] Bag Of Word Model
-- [ ] Bernoulli Naive Bayes Model Train
-- [ ] Classification Comparation
+- [x] Convolution Neural Networks(CNN) Training
+- [x] Convolution Neural Networks(CNN) Predict
+- [x] Convolution Neural Networks(CNN) Save Model
+- [x] Convolution Neural Networks(CNN) Load Model And Predict
+- [ ] Visualtation Of Convolution Neural Networks(CNN) Predict
 - [ ] WordCloud
-- [ ] Bernoulli Predict
-- [ ] Visualtation Of Bernoulli Predict
 
 ## Getting Started
 
@@ -47,6 +47,8 @@ $ pip install -r requirements.txt
 - Python 3.6;
 - pandas;
 - twint;
+- keras;
+- tensorflow;
 
 ### And coding style tests
 
@@ -64,6 +66,9 @@ $ python ./black
     * 1.2 limit
 2. change Sentiment Analysis in index.py
     * 2.1 file name(sample file to load **crawl_result.csv**)
+3. download word2vec indonesian model
+    * 3.1 https://github.com/deryrahman/word2vec-bahasa-indonesia.git
+
 
 ```
 $ python run_crawl.py
