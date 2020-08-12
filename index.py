@@ -226,12 +226,14 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
     df = pd.read_csv(filepath_or_buffer="result_6_tokenization.csv", nrows=total_row)
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
     print(len(data_train), len(data_test))
+
     # Train
     all_training_words = [word for tokens in data_train["tokens"] for word in tokens]
     training_sentence_lengths = [len(tokens) for tokens in data_train["tokens"]]
     TRAINING_VOCAB = sorted(list(set(all_training_words)))
     print("%s words total, with a vocabulary size of %s" % (len(all_training_words), len(TRAINING_VOCAB)))
     print("Max sentence length is %s" % max(training_sentence_lengths))
+
     # Test
     all_test_words = [word for tokens in data_test["tokens"] for word in tokens]
     test_sentence_lengths = [len(tokens) for tokens in data_test["tokens"]]
@@ -239,13 +241,12 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
     print("%s words total, with a vocabulary size of %s" % (len(all_test_words), len(TEST_VOCAB)))
     print("Max sentence length is %s" % max(test_sentence_lengths))
 
-    ### Load Google News Word2Vec model
-    word2vec_path = 'D:\Documents\Skripsi_Semangat\skripsi\word2vec\idwiki_word2vec_100.zip'
-    # word2vec = models.KeyedVectors.load_word2vec_format(word2vec_path, binary=True)
-    word2vec = models.word2vec.Word2Vec.load("D:\Documents\Skripsi_Semangat\skripsi\word2vec\idwiki_word2vec_100.model")
+    # Load Word2Vec Indonesia
+    word2vec = models.word2vec.Word2Vec.load("./idwiki_word2vec_200_new_lower.model")
 
     # Get Embed
     training_embeddings = get_word2vec_embeddings(word2vec, data_train, generate_missing=True)
+    # MAX_SEQUENCE_LENGTH = 50
     MAX_SEQUENCE_LENGTH = 50
     EMBEDDING_DIM = embedding_dim
 
@@ -263,9 +264,11 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
         train_embedding_weights[index,:] = word2vec[word] if word in word2vec else np.random.rand(EMBEDDING_DIM)
     print(train_embedding_weights.shape)
 
-    test_sequences = tokenizer.texts_to_sequences(data_test["tweet_final"].tolist())
+    test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
+    print("Test Sequence : ", test_sequences)
     test_cnn_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
     label_names = ['positive', 'negative']
+    # label_names: List[str] = ['sentimen']
     y_train = data_train[label_names].values
     x_train = train_cnn_data
     y_tr = y_train
@@ -288,6 +291,8 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
         prediction_labels.append(labels[np.argmax(p)])
 
     print(">> Predicted Result >> ", sum(data_test.sentimen==prediction_labels)/len(prediction_labels))
+    print("Prediction_label : ", prediction_labels)
+    print("Actual Label : ", data_test.sentimen)
     print(data_test.sentimen.value_counts())
 
 def get_average_word2vec(tokens_list, vector, generate_missing=False, k=300):
@@ -357,7 +362,7 @@ def load_model(total_row=29000):
 
     model = keras.models.load_model('model')
 
-    test_sequences = tokenizer.texts_to_sequences(data_test["tweet_final"].tolist())
+    test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
     MAX_SEQUENCE_LENGTH = 50
     test_cnn_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
     predictions = model.predict(test_cnn_data, batch_size=1000, verbose=1)
@@ -367,13 +372,15 @@ def load_model(total_row=29000):
         prediction_labels.append(labels[np.argmax(p)])
 
     print(">> Hasil >> ", sum(data_test.sentimen==prediction_labels)/len(prediction_labels))
+    print("Prediction_label : ", prediction_labels)
+    print("Actual Label : ", data_test.sentimen)
     print(data_test.sentimen.value_counts())
 
 
 if __name__ == "__main__":
     # main()
-    #training(total_row=29000, embedding_dim=2900, batch_size=5000)
-    load_model()
+    training(total_row=29000, embedding_dim=8, batch_size=32)
+    #load_model(total_row=29000)
 
 
 print("--- %s seconds ---" % (time.time() - start_time))
