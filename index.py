@@ -35,78 +35,67 @@ import string
 start_time = time.time()
 
 
-def main() -> None:
+def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
     # Choose Your Crawl Output
-    file_name: str = "crawl_result.csv"
-    threshold_sentiment_positive: float = 0.21
-    threshold_sentiment_negative: float = 0.21
+    threshold_sentiment_positive: float = 0.1
+    threshold_sentiment_negative: float = 0.1
 
     # Positive Negative Words
     file_name_positive_label: str = "./positive_label_word.txt"
     file_name_negative_label: str = "./negative_label_word.txt"
 
     # Choose Your Preferable Processor Capability
-    total_thread_processor: int = 8
+    total_thread_processor: int = total_thread_processor
 
-    df = pd.read_csv(filepath_or_buffer=file_name, nrows=30000)
+    # Crawl File Name
+    file_name: str = "crawl_result.csv"
+
+    df = pd.read_csv(filepath_or_buffer=file_name, nrows=total_row)
     df.drop_duplicates(subset="tweet", keep="first", inplace=True)
-    print("==========================")
+
+    # Remove unused column
+    df = df[
+        [
+            "date",
+            "time",
+            "username",
+            "tweet",
+        ]
+    ]
+
+    # Preprocessing | Case Folding
+    df["tweet_original"] = df["tweet"].str.lower()
+    df["preprocessing_case_folding"] = df["tweet"].str.lower()
     df["tweet"] = df["tweet"].str.lower()
-    df.to_csv("result_preprocess.csv")
 
-    df_filtered_object = Filter()
-    df_filtered_object: pd.DataFrame = df_filtered_object.filter_unused_character(df=df)
-    df_filtered_object.to_csv("result_2_filtering.csv")
+    f = Filter()
+    df = f.filter_unused_character(df=df)
 
-    # Sastrawi
-    stopword = StopWordRemoverFactory().create_stop_word_remover()
-    stemmer = StemmerFactory().create_stemmer()
-
+    # Preprocessing | Replacement Tweet Common word
     filter_common_word_obj = Filter()
-    # Replacement Tweet Common word
     list_tweet_replaced_with_common_word: List[str] = list()
-    for x in tqdm(df_filtered_object["tweet"]):
+    for x in tqdm(df["tweet"]):
         temp_result: str = filter_common_word_obj.replace_common_word(tweet=x)
         list_tweet_replaced_with_common_word.append(temp_result)
-    df_filtered_object["tweet"] = list_tweet_replaced_with_common_word
+    df["preprocessing_replace_common_word"] = list_tweet_replaced_with_common_word
+    df["tweet"] = list_tweet_replaced_with_common_word
 
-    # Stop Word Remove
+    # Preprocessing | Stop Word Remove
+    stopword = StopWordRemoverFactory().create_stop_word_remover()
     list_tweet_stopword: List[str] = list()
-    for x in df_filtered_object["tweet"]:
+    for x in df["tweet"]:
         stop_word_result: str = stopword.remove(text=x)
         list_tweet_stopword.append(stop_word_result)
-    df_filtered_object["tweet"] = list_tweet_stopword
+    df["preprocessing_stopword"] = list_tweet_stopword
+    df["tweet"] = list_tweet_stopword
 
     # Process Stemming
-    # stem_object = Stemming()
-    # result_stem_object: List[str] = stem_object.stem(tweets=df_filtered_object["tweet"], total_thread=total_thread_processor)
-    # df_filtered_object["tweet"] = result_stem_object
+    stem_object = Stemming()
+    result_stem_object: List[str] = stem_object.stem(tweets=df["tweet"], total_thread=total_thread_processor)
+    df["preprocessing_stemming"] = result_stem_object
+    df["tweet"] = result_stem_object
 
-    # Save Stemming
-    # df_filtered_object.to_csv(path_or_buf="result_3_stemming.csv")
-
-    # load stemming
-    df_filtered_object = pd.read_csv(filepath_or_buffer="./result_3_stemming.csv")
-    print(df_filtered_object.head())
-    # Count Most Word
-    combined_word: str = None
-    for x in tqdm(df_filtered_object["tweet"]):
-        combined_word = str(combined_word) + str(x)
-
-    counter_result: Counter = Counter(combined_word.split())
-    counter_result_most_common: List[tuple] = counter_result.most_common(10)
-    print(counter_result_most_common)
-
-    import matplotlib.pyplot as plt
-
-    x_val = [x[0] for x in counter_result_most_common]
-    y_val = [x[1] for x in counter_result_most_common]
-    plt.plot(x_val, y_val)
-    plt.plot(x_val, y_val, "or")
-    plt.savefig("graph_most_common_word.jpg")
-    plt.clf()
-
-    # Read Label Positive And Negative Words
+    # Preprocessing | Read Label Positive And Negative Words from Dictionary
     positive = pd.read_csv(filepath_or_buffer=file_name_positive_label, header=None)
     positive = positive[0].values.tolist()
     positive = "|".join(positive)
@@ -115,115 +104,104 @@ def main() -> None:
     negative = negative[0].values.tolist()
     negative = "|".join(negative)
 
-    # Remove Empty Value(NaN, None, NaT)
-    df_filtered_object = df_filtered_object[pd.notnull(df_filtered_object["tweet"])]
+    # Preproccesing | Remove Empty Value(NaN, None, NaT)
+    df = df[pd.notnull(df["tweet"])]
 
-    # Weigh Each Tweet Positive Or Negative Sentiment
-    df_filtered_object["positive"] = [
+    # Preprocessing | Weigh Tweet Positive Or Negative Sentiment
+    df["positive"] = [
         len(re.findall(positive, x.lower()))
         / (1 if len(x.split()) == 0 else len(x.split()))
-        for x in tqdm(df_filtered_object["tweet"])
+        for x in tqdm(df["tweet"])
     ]
-    df_filtered_object["negative"] = [
+    df["negative"] = [
         len(re.findall(negative, x.lower()))
         / (1 if len(x.split()) == 0 else len(x.split()))
-        for x in tqdm(df_filtered_object["tweet"])
+        for x in tqdm(df["tweet"])
     ]
-    df_filtered_object.to_csv(path_or_buf="result_4_labeling.csv")
+   
+    # Preproccesing | Labeling Sentiment Column
+    df["sentimen"] = [
+        0
+        if df.iloc[x].positive > df.iloc[x].negative
+        else 1
+        for x in range(df.shape[0])
+    ]
+    
+    # Preprocessing | Tokenizer
+    t = TokenizerLocal()
+    tokens: List[List[str]] = t.create_token(tweets=(df["tweet"]).tolist())
+    
+    # Preprocessing | Removes Stopwords(Using Lib)
+    f = Filter()
+    df["tokens"]  = [
+        f.remove_stop_words(tokens=x) for x in tqdm(tokens)
+    ]
+    df["tweet_final"] = [" ".join(x) for x in df["tokens"]]
 
-    # Draw Sentiment Into Graph
+    # Remove unused column
+    df = df[
+        [
+            "date",
+            "time",
+            "preprocessing_replace_common_word",
+            "preprocessing_stopword",
+            "preprocessing_stemming",
+            "username",
+            "tweet_original",
+            "tweet",
+            "tweet_final",
+            "tokens",
+            "positive",
+            "negative",
+            "sentimen",
+        ]
+    ]
+    df.to_csv("result_preprocess.csv")
+
+    # Additional | Draw Sentiment Into Graph
     import matplotlib.pyplot as plt
 
     total_negative_tweets: int = len(
-        [x for x in df_filtered_object["negative"] if x >= threshold_sentiment_negative]
+        [x for x in df["negative"] if x >= threshold_sentiment_negative]
     )
     total_positive_tweets: int = len(
-        [x for x in df_filtered_object["positive"] if x >= threshold_sentiment_positive]
+        [x for x in df["positive"] if x >= threshold_sentiment_positive]
     )
-    # Count Neutral Tweet
-    counter_neutral_tweets: int = 0
-    for index, positive_value_of_tweet in tqdm(
-        enumerate(df_filtered_object["positive"])
-    ):
-        if (
-            positive_value_of_tweet == 0
-            or positive_value_of_tweet < threshold_sentiment_positive
-        ):
-            negative_value_of_tweet = df_filtered_object.iloc[index, 35]
-            if (
-                negative_value_of_tweet == 0
-                or negative_value_of_tweet < threshold_sentiment_negative
-            ):
-                counter_neutral_tweets = counter_neutral_tweets + 1
-    print(total_negative_tweets)
-    print(total_positive_tweets)
-    print(counter_neutral_tweets)
-    total_tweets = df.shape[0]
 
     df_bar = pd.Series(
-        data=[total_negative_tweets, total_positive_tweets, counter_neutral_tweets],
+        data=[total_negative_tweets, total_positive_tweets],
         index=[
             "negative " + str(total_negative_tweets),
             "positive " + str(total_positive_tweets),
-            "neutral " + str(counter_neutral_tweets),
         ],
     )
 
     bar = plt.bar(df_bar.index, df_bar.values)
     bar[0].set_color("#EE204D")
     bar[1].set_color("#00FF00")
-    bar[2].set_color("#0000FF")
     plt.savefig("graph_sentiment_bar_chart.jpg")
     plt.clf()
 
-    df_filtered_object["sentimen"] = [
-        0
-        if df_filtered_object.iloc[x].positive >= df_filtered_object.iloc[x].negative
-        else 1
-        for x in range(df_filtered_object.shape[0])
-    ]
-    df_filtered_object.to_csv(path_or_buf="result_5_sentiment_label.csv")
+    # Additional | Count Most Word
+    combined_word: str = None
+    for x in tqdm(df["tweet"]):
+        combined_word = str(combined_word) + str(x)
 
-    # Tokenizer
-    t = TokenizerLocal()
-    tokens: List[List[str]] = t.create_token(tweets=(df_filtered_object["tweet"]).tolist())
-    
-    # Removes Stopwords
-    f = Filter()
-    filtered_words: List[List[str]] = [
-        f.remove_stop_words(tokens=x) for x in tqdm(tokens)
-    ]
+    counter_result: Counter = Counter(combined_word.split())
+    counter_result_most_common: List[tuple] = counter_result.most_common(10)
+    print(counter_result_most_common)
 
-    # Join Token
-    result = [" ".join(x) for x in filtered_words]
+    x_val = [x[0] for x in counter_result_most_common]
+    y_val = [x[1] for x in counter_result_most_common]
+    plt.plot(x_val, y_val)
+    plt.plot(x_val, y_val, "or")
+    plt.savefig("graph_most_common_word.jpg")
+    plt.clf()
 
-    # Add Column "tweet_token" to dataframe
-    df_filtered_object["tokens"] = filtered_words
+def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 100, num_epochs: int = 2) -> None:
 
-    # Add Column "tweet_final" to dataframe
-    df_filtered_object["tweet_final"] = result
-
-    # Remove unused column
-    df_final = df_filtered_object[
-        [
-            "date",
-            "time",
-            "username",
-            "tweet",
-            "tokens",
-            "tweet_final",
-            "positive",
-            "negative",
-            "sentimen",
-        ]
-    ]
-    df_final.to_csv("result_6_tokenization.csv")
-
-    
-
-def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 100) -> None:
-    ### Split data into test and train
-    df = pd.read_csv(filepath_or_buffer="result_6_tokenization.csv", nrows=total_row)
+    # Split data into test and train
+    df = pd.read_csv(filepath_or_buffer="result_preprocess.csv", nrows=total_row)
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
     print(len(data_train), len(data_test))
 
@@ -246,6 +224,7 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
 
     # Get Embed
     training_embeddings = get_word2vec_embeddings(word2vec, data_train, generate_missing=True)
+
     # MAX_SEQUENCE_LENGTH = 50
     MAX_SEQUENCE_LENGTH = 50
     EMBEDDING_DIM = embedding_dim
@@ -265,11 +244,12 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
     print(train_embedding_weights.shape)
 
     test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
-    print("Test Sequence : ", test_sequences)
+    # print("Test Sequence : ", test_sequences)
     test_cnn_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
     label_names = ['positive', 'negative']
     # label_names: List[str] = ['sentimen']
     y_train = data_train[label_names].values
+    print("y_train >> ",y_train)
     x_train = train_cnn_data
     y_tr = y_train
 
@@ -278,11 +258,22 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
 
 
     # Train CNN
-    num_epochs = 3
-    batch_size: int = batch_size
-    hist = model.fit(x_train, y_tr, epochs=num_epochs, validation_split=0.1, shuffle=True, batch_size=batch_size)
+    ## Call Back
+    from keras import callbacks
+    callbacks = [
+        callbacks.EarlyStopping(
+            # Stop training when `val_loss` is no longer improving
+            monitor="val_loss",
+            # "no longer improving" being defined as "no better than 1e-2 less"
+            min_delta=1e-2,
+            # "no longer improving" being further defined as "for at least 2 epochs"
+            patience=2,
+            verbose=1,
+        )
+    ]
+    hist = model.fit(x_train, y_tr, epochs=num_epochs, validation_split=0.2, shuffle=True, batch_size=batch_size, callbacks=callbacks)
     model.save("./model")
-    predictions = model.predict(test_cnn_data, batch_size=1000, verbose=1)
+    predictions = model.predict(test_cnn_data, batch_size=batch_size, verbose=1)
 
     labels = [0, 1]
 
@@ -291,8 +282,8 @@ def training(total_row: int = 1000, embedding_dim: int= 100, batch_size: int = 1
         prediction_labels.append(labels[np.argmax(p)])
 
     print(">> Predicted Result >> ", sum(data_test.sentimen==prediction_labels)/len(prediction_labels))
-    print("Prediction_label : ", prediction_labels)
-    print("Actual Label : ", data_test.sentimen)
+    #print("Prediction_label : ", prediction_labels)
+    # print("Actual Label : ", data_test.sentimen)
     print(data_test.sentimen.value_counts())
 
 def get_average_word2vec(tokens_list, vector, generate_missing=False, k=300):
@@ -372,15 +363,27 @@ def load_model(total_row=29000):
         prediction_labels.append(labels[np.argmax(p)])
 
     print(">> Hasil >> ", sum(data_test.sentimen==prediction_labels)/len(prediction_labels))
-    print("Prediction_label : ", prediction_labels)
-    print("Actual Label : ", data_test.sentimen)
+    #print("Prediction_label : ", prediction_labels)
+    # print("Actual Label : ", data_test.sentimen)
     print(data_test.sentimen.value_counts())
 
+def write_vector_to_csv(filename: str = None) -> None:
+    df = pd.read_csv(filepath_or_buffer=filename)
+    df["preprocess_vector"] = df["tokens"]
+    print("preprocess_vector")
+    from keras.preprocessing.text import Tokenizer
+    from keras.preprocessing.sequence import pad_sequences
+    tokenizer = Tokenizer(num_words=100000)
+    tokenizer.fit_on_texts((df["preprocess_vector"]).tolist())
+    sequences = tokenizer.texts_to_sequences((df["preprocess_vector"]).tolist())
+    df["preprocess_vector"] = sequences
+    df.to_csv("result_preprocess.csv")
 
 if __name__ == "__main__":
-    # main()
-    training(total_row=29000, embedding_dim=8, batch_size=32)
-    #load_model(total_row=29000)
+    #preprocess(total_row=12000, total_thread_processor=8)
+    write_vector_to_csv(filename="result_preprocess.csv")
+    # training(total_row=11671, embedding_dim=8, batch_size=64, num_epochs=4)
+    # load_model(total_row=28918)
 
 
 print("--- %s seconds ---" % (time.time() - start_time))
