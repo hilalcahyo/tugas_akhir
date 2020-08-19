@@ -64,7 +64,7 @@ def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
     ]
 
     # Preprocessing | Case Folding
-    df["tweet_original"] = df["tweet"].str.lower()
+    df["tweet_original"] = df["tweet"]
     df["preprocessing_case_folding"] = df["tweet"].str.lower()
     df["tweet"] = df["tweet"].str.lower()
 
@@ -143,6 +143,7 @@ def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
         [
             "date",
             "time",
+            "preprocessing_case_folding",
             "preprocessing_replace_common_word",
             "preprocessing_stopword",
             "preprocessing_stemming",
@@ -337,12 +338,12 @@ def ConvNet(embeddings, max_sequence_length, num_words, embedding_dim, labels_in
     model.summary()
     return model
 
-def load_model(total_row=29000):
+def load_model(total_row=29000, filename: str = None):
     import keras
     from keras.preprocessing.text import Tokenizer
 
 
-    df = pd.read_csv(filepath_or_buffer="result_6_tokenization.csv", nrows=total_row)
+    df = pd.read_csv(filepath_or_buffer=filename, nrows=total_row)
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
 
     all_training_words = [word for tokens in data_train["tokens"] for word in tokens]
@@ -351,7 +352,7 @@ def load_model(total_row=29000):
     tokenizer = Tokenizer(num_words=len(TRAINING_VOCAB), lower=True, char_level=False)
     tokenizer.fit_on_texts(data_train["tokens"].tolist())
 
-    model = keras.models.load_model('model')
+    model = keras.models.load_model('./model')
 
     test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
     MAX_SEQUENCE_LENGTH = 50
@@ -367,23 +368,23 @@ def load_model(total_row=29000):
     # print("Actual Label : ", data_test.sentimen)
     print(data_test.sentimen.value_counts())
 
-def write_vector_to_csv(filename: str = None) -> None:
-    df = pd.read_csv(filepath_or_buffer=filename)
-    df["preprocess_vector"] = df["tokens"]
-    print("preprocess_vector")
-    from keras.preprocessing.text import Tokenizer
-    from keras.preprocessing.sequence import pad_sequences
-    tokenizer = Tokenizer(num_words=100000)
-    tokenizer.fit_on_texts((df["preprocess_vector"]).tolist())
-    sequences = tokenizer.texts_to_sequences((df["preprocess_vector"]).tolist())
-    df["preprocess_vector"] = sequences
-    df.to_csv("result_preprocess.csv")
+# def write_vector_to_csv(filename: str = None) -> None:
+#     df = pd.read_csv(filepath_or_buffer=filename)
+#     df["preprocess_vector"] = df["tokens"]
+#     print("preprocess_vector")
+#     from keras.preprocessing.text import Tokenizer
+#     from keras.preprocessing.sequence import pad_sequences
+#     tokenizer = Tokenizer(num_words=100000)
+#     tokenizer.fit_on_texts((df["preprocess_vector"]).tolist())
+#     sequences = tokenizer.texts_to_sequences((df["preprocess_vector"]).tolist())
+#     df["preprocess_vector"] = sequences
+#     df.to_csv("result_preprocess.csv")
 
 if __name__ == "__main__":
-    #preprocess(total_row=12000, total_thread_processor=8)
-    write_vector_to_csv(filename="result_preprocess.csv")
-    # training(total_row=11671, embedding_dim=8, batch_size=64, num_epochs=4)
-    # load_model(total_row=28918)
+    #preprocess(total_row=12000, total_thread_processor=4)
+    #write_vector_to_csv(filename="result_preprocess.csv")
+    training(total_row=11672, embedding_dim=8, batch_size=64, num_epochs=3)
+    #load_model(total_row=28918, filename="result_preprocess.csv")
 
 
 print("--- %s seconds ---" % (time.time() - start_time))

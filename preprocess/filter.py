@@ -9,23 +9,17 @@ class Filter:
         pass
 
     def filter_unused_character(self, df: pd.DataFrame = None) -> pd.DataFrame:
-        print("ccccc", df)
-        df["tweet"] = df["tweet"].str.replace("(https?://[\w\.\/]*)", "")  # http
-        df["tweet"] = df["tweet"].str.replace(
-            "(?:&(?:lt|nbsp|amp|gt);)", ""
-        )  # lt,nbsp,gt,amp
-        df["tweet"] = df["tweet"].str.replace("(@|#)\w+", "")  # @ dan #
-        df["tweet"] = df["tweet"].str.replace(
-            "[^A-Za-z0-9\s\-\/]", ""
-        )  # selain huruf, spasi dan strip
+        df["tweet"] = df["tweet"].str.replace("\bpic.twitter.com\S+", " ")  # remove pictwittercom
+        df["tweet"] = df["tweet"].str.replace("(https?://[\w\.\/]*)", " ")  # http
+        df["tweet"] = df["tweet"].str.replace("(?:&(?:lt|nbsp|amp|gt);)", " ")  # lt,nbsp,gt,amp
+        df["tweet"] = df["tweet"].str.replace("(@|#)\w+", " ")  # @ dan #
+        df["tweet"] = df["tweet"].str.replace("[^A-Za-z0-9\s\-\/]", "")  # selain huruf, spasi dan strip
         df["tweet"] = df["tweet"].str.replace("(\-|\/)", " ")  # -
         df["tweet"] = df["tweet"].str.replace("\n", " ")  # enter
         df["tweet"] = df["tweet"].str.replace("\s{2,}", " ")  # spasi lebih dari 2
-        df["tweet"] = df["tweet"].str.replace("^rt.*", "")  # Remove RT tweet
+        df["tweet"] = df["tweet"].str.replace("^rt.*", " ")  # Remove RT tweet
         df["tweet"] = df["tweet"].str.replace("\.\.", " ")
-        df["tweet"] = df["tweet"].str.replace(
-            "pictwittercom", ""
-        )  # remove pictwittercom
+        df["tweet"] = df["tweet"].str.replace("\bpictwittercom\S+", "")  # remove pictwittercom
         # df.dropna(subset=["tweet"], inplace=True)  # Remove Empty cell
         return df
 
@@ -56,6 +50,8 @@ class Filter:
         data = re.sub(r"\bnjir\b", "anjing", data)
         data = re.sub(r"\bDDT\b|\bddt\b", "double double track", data)
         data = re.sub(r"\bkzl\b|\bkesal\b", "kesel", data)
+        data = re.sub(r"\bpic.twitter.com\S+", "", data)
+        data = re.sub(r"\bpictwittercom\b", "", data)
 
         return data
 

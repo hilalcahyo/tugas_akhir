@@ -1,7 +1,7 @@
 import tqdm
 import nltk
-from nltk import WordNetLemmatizer, word_tokenize
 from typing import List
+from nltk.tokenize import TweetTokenizer
 
 
 class TokenizerLocal:
@@ -9,7 +9,8 @@ class TokenizerLocal:
         pass
 
     def create_token(self, tweets: List[str] = list()) -> List[List[str]]:
-        nltk.download('punkt')
-        tokens = [word_tokenize(text=x) for x in tqdm(tweets)]
-        print(tokens[0])
+        # nltk.download('punkt')
+        tknzr = TweetTokenizer()
+        tokens = [tknzr.tokenize(text=x) for x in tweets]
+        print(">>> ", tokens[0])
         return tokens
