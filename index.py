@@ -44,13 +44,9 @@ import string
 
 
 def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
-    # Choose Your Crawl Output
-    threshold_sentiment_positive: float = 0.1
-    threshold_sentiment_negative: float = 0.1
-
     # Positive Negative Words
-    file_name_positive_label: str = "./positive_label_word.txt"
-    file_name_negative_label: str = "./negative_label_word.txt"
+    file_name_positive_label: str = "positif_ta2.txt"
+    file_name_negative_label: str = "negatif_ta2.txt"
 
     # Choose Your Preferable Processor Capability
     total_thread_processor: int = total_thread_processor
@@ -158,45 +154,9 @@ def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
     ]
     df.to_csv("result_preprocess.csv")
 
-    # Additional | Draw Sentiment Into Graph
-    import matplotlib.pyplot as plt
+    
 
-    total_negative_tweets: int = len(
-        [x for x in df["negative"] if x >= threshold_sentiment_negative]
-    )
-    total_positive_tweets: int = len(
-        [x for x in df["positive"] if x >= threshold_sentiment_positive]
-    )
-
-    df_bar = pd.Series(
-        data=[total_negative_tweets, total_positive_tweets],
-        index=[
-            "negative " + str(total_negative_tweets),
-            "positive " + str(total_positive_tweets),
-        ],
-    )
-
-    bar = plt.bar(df_bar.index, df_bar.values)
-    bar[0].set_color("#EE204D")
-    bar[1].set_color("#00FF00")
-    plt.savefig("graph_sentiment_bar_chart.jpg")
-    plt.clf()
-
-    # Additional | Count Most Word
-    combined_word: str = None
-    for x in tqdm(df["tweet"]):
-        combined_word = str(combined_word) + str(x)
-
-    counter_result: Counter = Counter(combined_word.split())
-    counter_result_most_common: List[tuple] = counter_result.most_common(10)
-    print(counter_result_most_common)
-
-    x_val = [x[0] for x in counter_result_most_common]
-    y_val = [x[1] for x in counter_result_most_common]
-    plt.plot(x_val, y_val)
-    plt.plot(x_val, y_val, "or")
-    plt.savefig("graph_most_common_word.jpg")
-    plt.clf()
+    
 
 
 def training(
@@ -207,7 +167,7 @@ def training(
 ) -> None:
 
     # Split data into test and train
-    df = pd.read_csv(filepath_or_buffer="result_preprocess.csv", nrows=total_row)
+    df = pd.read_csv(filepath_or_buffer="result_preprocess_old.csv", nrows=total_row)
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
     print(len(data_train), len(data_test))
 
@@ -390,6 +350,10 @@ def ConvNet(embeddings, max_sequence_length, num_words, embedding_dim, labels_in
 def load_model(total_row=29000, filename: str = None):
     import keras
     from keras.preprocessing.text import Tokenizer
+    # Word Cloud 
+    from wordcloud import WordCloud, STOPWORDS 
+    import matplotlib.pyplot as plt 
+    from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
     df = pd.read_csv(filepath_or_buffer=filename, nrows=total_row)
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
@@ -418,8 +382,6 @@ def load_model(total_row=29000, filename: str = None):
     print("Total Data : ", data_test.sentimen.value_counts())
 
     # Confusion Matrix
-    from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
-    import matplotlib as plt
     y_pred = np.argmax(predictions, axis=1)
     print("Confusion Matrix")
     x1, x2, y1, y2 = (confusion_matrix(y_true=data_test.sentimen.tolist(), y_pred=y_pred, labels=[0,1])).ravel()
@@ -429,6 +391,22 @@ def load_model(total_row=29000, filename: str = None):
     print("FP : ", y2)
     target_names = ["Positive", "Negative"]
     print(classification_report(y_true=data_test.sentimen, y_pred=y_pred, labels=[0,1], target_names=target_names))
+
+    # Wordcloud 
+    comment_words = '' 
+    stopwords = set(STOPWORDS)  
+    comment_words += " ".join(df.tokens)+" "
+    print(len(comment_words)) 
+    wordcloud = WordCloud(width = 800, height = 800, 
+                background_color ='white', 
+                stopwords = stopwords, 
+                min_font_size = 10, collocations=False).generate(comment_words) 
+    plt.figure(figsize = (8, 8), facecolor = None) 
+    plt.imshow(wordcloud) 
+    plt.axis("off") 
+    plt.tight_layout(pad = 0) 
+    plt.savefig("graph_word_cloud.png") 
+    plt.close()
 
     # # Visualize | Confussion Matrix
     # disp = ConfusionMatrixDisplay(confusion_matrix=cm).plot()
@@ -469,15 +447,15 @@ def write_vector_to_csv(filename: str = None) -> None:
             "preprocess_vector"
         ]
     ]
-    df.to_csv("result_preprocess.csv")
+    df.to_csv("result_preprocess_old.csv")
 
-def preprocess_weigh_label(filename: str="result_preprocess.csv", total_thread: int=4):
+def preprocess_weigh_label(filename: str="result_preprocess_old.csv", total_thread: int=4):
     # Read
     df = pd.read_csv(filepath_or_buffer=filename)
     
     # Positive Negative Words
-    file_name_positive_label: str = "./positive_label_word.txt"
-    file_name_negative_label: str = "./negative_label_word.txt"
+    file_name_positive_label: str = "./positif_ta2.txt"
+    file_name_negative_label: str = "./negatif_ta2.txt"
 
     # Preprocessing | Read Label Positive And Negative Words from Dictionary
     positive = pd.read_csv(filepath_or_buffer=file_name_positive_label, header=None)
@@ -542,18 +520,63 @@ def preprocess_weigh_label(filename: str="result_preprocess.csv", total_thread: 
         ]
     ]
 
-    df.to_csv("result_preprocess.csv")
+    df.to_csv("result_preprocess_old.csv")
 
 def _remove_numeric(tweet: str= None) -> str: 
     pattern = '[0-9]'
     return [re.sub(pattern, '', i) for i in tweet.split()] 
-  
+
+def draw_sentiment_and_most_word(filename: str = None, total_row: int = 0):
+    import matplotlib.pyplot as plt
+
+    df = pd.read_csv(filepath_or_buffer=filename, nrows=total_row)
+
+    # Additional | Most Word
+    combined_word: str = None
+    for x in tqdm(df["tweet"]):
+        combined_word = str(combined_word) + str(x)
+
+    counter_result: Counter = Counter(combined_word.split())
+    counter_result_most_common: List[tuple] = counter_result.most_common(10)
+    print(counter_result_most_common)
+
+    x_val = [x[0] for x in counter_result_most_common]
+    y_val = [x[1] for x in counter_result_most_common]
+    plt.plot(x_val, y_val)
+    plt.plot(x_val, y_val, "or")
+    plt.savefig("graph_most_common_word.jpg")
+    plt.clf()
+
+    # Additional | Draw Sentiment Into Graph
+    
+
+    total_negative_tweets: int = len(
+        [x for x in df["sentimen"] if x == 0]
+    )
+    total_positive_tweets: int = len(
+        [x for x in df["sentimen"] if x != 0]
+    )
+
+    df_bar = pd.Series(
+        data=[total_negative_tweets, total_positive_tweets],
+        index=[
+            "negative " + str(total_negative_tweets),
+            "positive " + str(total_positive_tweets),
+        ],
+    )
+
+    bar = plt.bar(df_bar.index, df_bar.values)
+    bar[0].set_color("#EE204D")
+    bar[1].set_color("#00FF00")
+    plt.savefig("graph_sentiment_bar_chart.jpg")
+    plt.clf()
+
 if __name__ == "__main__":
     start_time = time.time()
-    #preprocess(total_row=12000, total_thread_processor=4)
+    draw_sentiment_and_most_word(total_row=10000, filename="result_preprocess_old.csv")
+    preprocess(total_row=12000, total_thread_processor=4)
     #preprocess_weigh_label()
-    write_vector_to_csv(filename="result_preprocess.csv")
-    # training(total_row=10000, embedding_dim=8, batch_size=64, num_epochs=3)
-    #load_model(total_row=10000, filename="result_preprocess.csv")
-
+    #write_vector_to_csv(filename="result_preprocess_old.csv")
+    #training(total_row=10000, embedding_dim=8, batch_size=64, num_epochs=3)
+    # load_model(total_row=10000, filename="result_preprocess_old.csv")
     print("--- %s seconds ---" % (time.time() - start_time))
