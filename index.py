@@ -171,7 +171,7 @@ def training(
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
     print(len(data_train), len(data_test))
 
-    # Train
+    # Make Dictionary Data Train
     all_training_words = [word for tokens in data_train["tokens"] for word in tokens]
     training_sentence_lengths = [len(tokens) for tokens in data_train["tokens"]]
     TRAINING_VOCAB = sorted(list(set(all_training_words)))
@@ -181,7 +181,7 @@ def training(
     )
     print("Max sentence length is %s" % max(training_sentence_lengths))
 
-    # Test
+    # Make Dictionary Data Test
     all_test_words = [word for tokens in data_test["tokens"] for word in tokens]
     test_sentence_lengths = [len(tokens) for tokens in data_test["tokens"]]
     TEST_VOCAB = sorted(list(set(all_test_words)))
@@ -194,7 +194,7 @@ def training(
     # Load Word2Vec Indonesia
     word2vec = models.word2vec.Word2Vec.load("./idwiki_word2vec_200_new_lower.model")
 
-    # Get Embed
+    # Projected Token To Vector Using Word2Vec
     training_embeddings = get_word2vec_embeddings(
         word2vec, data_train, generate_missing=True
     )
@@ -203,7 +203,7 @@ def training(
     MAX_SEQUENCE_LENGTH = 50
     EMBEDDING_DIM = embedding_dim
 
-    ### Tokenize and Pad sequences
+    ### Tokenize and Add Padding sequences
     tokenizer = Tokenizer(num_words=len(TRAINING_VOCAB), lower=True, char_level=False)
     tokenizer.fit_on_texts(data_train["tokens"].tolist())
     training_sequences = tokenizer.texts_to_sequences(data_train["tokens"].tolist())
@@ -220,12 +220,10 @@ def training(
     print(train_embedding_weights.shape)
 
     test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
-    # print("Test Sequence : ", test_sequences)
     test_cnn_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
+    #Choose Column For Weighting Tokens
     label_names = ["positive", "negative"]
-    # label_names: List[str] = ['sentimen']
     y_train = data_train[label_names].values
-    print("y_train >> ", y_train)
     x_train = train_cnn_data
     y_tr = y_train
 
@@ -237,10 +235,9 @@ def training(
         len(list(label_names)),
     )
 
-    # Train CNN
-    ## Call Back
-    from keras import callbacks
 
+    from keras import callbacks
+    # If epoch doesnt improve then stop
     callbacks = [
         callbacks.EarlyStopping(
             # Stop training when `val_loss` is no longer improving
@@ -252,6 +249,7 @@ def training(
             verbose=1,
         )
     ]
+    # Visualize Train Model
     hist = model.fit(
         x_train,
         y_tr,
@@ -261,15 +259,19 @@ def training(
         batch_size=batch_size,
         callbacks=callbacks,
     )
+    # Save Model To File
     model.save("./model")
+    
+    # Predicted Model
     predictions = model.predict(test_cnn_data, batch_size=batch_size, verbose=1)
 
+    # Mapping/Normalization Prediction(0..1)
     labels = [1, 0]
-
     prediction_labels = []
     for p in predictions:
         prediction_labels.append(labels[np.argmax(p)])
 
+    # Show Accuracy & Compare prediction
     print(
         ">> Predicted Result >> ",
         sum(data_test.sentimen == prediction_labels) / len(prediction_labels),
