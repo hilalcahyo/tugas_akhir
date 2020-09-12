@@ -1,3 +1,4 @@
+import sys
 from preprocess.crawl import Crawl
 from preprocess.filter import Filter
 import pandas as pd
@@ -12,6 +13,7 @@ import pandas as pd
 from typing import List
 import time
 import asyncio
+import keras.backend as K
 from collections import Counter
 from datetime import datetime
 from preprocess.stemming import Stemming
@@ -28,6 +30,7 @@ from keras.layers import (
     Conv1D,
     GlobalMaxPooling1D,
     Embedding,
+    LSTM,
 )
 from keras.layers.recurrent import LSTM
 from keras.models import Sequential
@@ -43,22 +46,26 @@ import re
 import string
 
 
-def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
+def preprocess(total_row: int = 10000, total_thread_processor: int = 2, file_name_input: str=None) -> None:
     # Positive Negative Words
-    file_name_positive_label: str = "positif_ta2.txt"
-    file_name_negative_label: str = "negatif_ta2.txt"
+    file_name_positive_label: str = "positif.txt"
+    file_name_negative_label: str = "negatif.txt"
 
     # Choose Your Preferable Processor Capability
     total_thread_processor: int = total_thread_processor
 
-    # Crawl File Name
-    file_name: str = "crawl_result.csv"
-
-    df = pd.read_csv(filepath_or_buffer=file_name, nrows=total_row)
+    df = pd.read_csv(filepath_or_buffer=file_name_input, nrows=total_row,sep=',', engine='python')
     df.drop_duplicates(subset="tweet", keep="first", inplace=True)
 
     # Remove unused column
-    df = df[["date", "time", "username", "tweet",]]
+    df = df[
+        [
+            "date",
+            "time",
+            "username",
+            "tweet",
+        ]
+    ]
 
     # Preprocessing | Case Folding
     df["tweet_original"] = df["tweet"]
@@ -154,26 +161,26 @@ def preprocess(total_row: int = 10000, total_thread_processor: int = 2) -> None:
     ]
     df.to_csv("result_preprocess.csv")
 
-    
-
-    
-
 
 def training(
     total_row: int = 1000,
     embedding_dim: int = 100,
-    batch_size: int = 100,
+    batch_size: int = 128,
     num_epochs: int = 2,
+    filename: str = None
 ) -> None:
 
     # Split data into test and train
-    df = pd.read_csv(filepath_or_buffer="result_preprocess_old.csv", nrows=total_row)
+    df = pd.read_csv(filepath_or_buffer=filename, nrows=total_row)
     data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
     print(len(data_train), len(data_test))
 
     # Make Dictionary Data Train
-    all_training_words = [word for tokens in data_train["tokens"] for word in tokens]
-    training_sentence_lengths = [len(tokens) for tokens in data_train["tokens"]]
+    # all_training_words = [word for tokens in data_train["tokens"] for word in tokens]
+    all_training_words = [
+        word for tokens in data_train["tokens"] for word in eval(tokens)
+    ]
+    training_sentence_lengths = [len(eval(tokens)) for tokens in data_train["tokens"]]
     TRAINING_VOCAB = sorted(list(set(all_training_words)))
     print(
         "%s words total, with a vocabulary size of %s"
@@ -182,8 +189,8 @@ def training(
     print("Max sentence length is %s" % max(training_sentence_lengths))
 
     # Make Dictionary Data Test
-    all_test_words = [word for tokens in data_test["tokens"] for word in tokens]
-    test_sentence_lengths = [len(tokens) for tokens in data_test["tokens"]]
+    all_test_words = [word for tokens in data_test["tokens"] for word in eval(tokens)]
+    test_sentence_lengths = [len(eval(tokens)) for tokens in data_test["tokens"]]
     TEST_VOCAB = sorted(list(set(all_test_words)))
     print(
         "%s words total, with a vocabulary size of %s"
@@ -192,27 +199,40 @@ def training(
     print("Max sentence length is %s" % max(test_sentence_lengths))
 
     # Load Word2Vec Indonesia
-    word2vec = models.word2vec.Word2Vec.load("./idwiki_word2vec_200_new_lower.model")
+    word2vec = models.word2vec.Word2Vec.load("./idwiki_word2vec_200.model")
 
     # Projected Token To Vector Using Word2Vec
     training_embeddings = get_word2vec_embeddings(
         word2vec, data_train, generate_missing=True
     )
+    import math
 
-    # MAX_SEQUENCE_LENGTH = 50
-    MAX_SEQUENCE_LENGTH = 50
+    # MAX_SEQUENCE_LENGTH = 50 menyamakan panjang twitter
+    MAX_SEQUENCE_LENGTH = max(training_sentence_lengths)
+    MAX_SEQUENCE_LENGTH = int(math.ceil((MAX_SEQUENCE_LENGTH) / 10.0)) * 10
     EMBEDDING_DIM = embedding_dim
 
     ### Tokenize and Add Padding sequences
-    tokenizer = Tokenizer(num_words=len(TRAINING_VOCAB), lower=True, char_level=False)
+    tokenizer = Tokenizer(
+        num_words=len(TRAINING_VOCAB),
+        lower=True,
+        char_level=False,
+        filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n',
+    )
     tokenizer.fit_on_texts(data_train["tokens"].tolist())
     training_sequences = tokenizer.texts_to_sequences(data_train["tokens"].tolist())
+    print("training_sequences(MAX) : ", max(training_sequences))
 
     train_word_index = tokenizer.word_index
     print("Found %s unique tokens." % len(train_word_index))
 
     train_cnn_data = pad_sequences(training_sequences, maxlen=MAX_SEQUENCE_LENGTH)
+    print("train_cnn_data size ", len(train_cnn_data))
+    print("train_cnn_data ", train_cnn_data)
     train_embedding_weights = np.zeros((len(train_word_index) + 1, EMBEDDING_DIM))
+    print("train_embedding_weights size ", len(train_embedding_weights))
+    print("train_embedding_weights ", train_embedding_weights)
+
     for word, index in train_word_index.items():
         train_embedding_weights[index, :] = (
             word2vec[word] if word in word2vec else np.random.rand(EMBEDDING_DIM)
@@ -221,11 +241,19 @@ def training(
 
     test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
     test_cnn_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
-    #Choose Column For Weighting Tokens
+    print(" test_cnn_data ", test_cnn_data)
+
+    # Choose Column For Weighting Tokens
     label_names = ["positive", "negative"]
     y_train = data_train[label_names].values
     x_train = train_cnn_data
     y_tr = y_train
+
+    print("$ train_embedding_weights ", train_embedding_weights)
+    print("$ MAX_SEQUENCE_LENGTH ", MAX_SEQUENCE_LENGTH)
+    print("$ len(train_word_index) + 1 ", len(train_word_index) + 1)
+    print("$ EMBEDDING_DIM ", EMBEDDING_DIM)
+    print("$ len(list(label_names)) ", len(list(label_names)))
 
     model = ConvNet(
         train_embedding_weights,
@@ -234,9 +262,10 @@ def training(
         EMBEDDING_DIM,
         len(list(label_names)),
     )
-
+    # sys.exit()
 
     from keras import callbacks
+
     # If epoch doesnt improve then stop
     callbacks = [
         callbacks.EarlyStopping(
@@ -250,18 +279,18 @@ def training(
         )
     ]
     # Visualize Train Model
-    hist = model.fit(
+    model.fit(
         x_train,
         y_tr,
         epochs=num_epochs,
         validation_split=0.2,
         shuffle=True,
         batch_size=batch_size,
-        callbacks=callbacks,
+        #callbacks=callbacks,
     )
     # Save Model To File
     model.save("./model")
-    
+
     # Predicted Model
     predictions = model.predict(test_cnn_data, batch_size=batch_size, verbose=1)
 
@@ -280,13 +309,36 @@ def training(
 
     # Confusion Matrix
     from sklearn.metrics import classification_report, confusion_matrix
-
+    import seaborn as sn
+    import matplotlib.pyplot as plt
     y_pred = np.argmax(predictions, axis=1)
     print("Confusion Matrix")
-    print(confusion_matrix(data_test.sentimen, y_pred))
-    target_names = ["positif", "negatif"]
-    print(classification_report(data_test.sentimen, y_pred, target_names=target_names))
+    (tn, fp, fn, tp) = (
+        confusion_matrix(
+            y_true=data_test.sentimen.tolist(), y_pred=prediction_labels, labels=[1, 0]
+        )
+    ).ravel()
+    cf_matrix_train = (
+        confusion_matrix(
+            y_true=data_test.sentimen.tolist(), y_pred=prediction_labels, labels=[1, 0]
+        )
+    )
+    print("(tn, fp, fn, tp)", (tn, fp, fn, tp))
+    target_names = ["Positive", "Negative"]
+    print(
+        classification_report(
+            y_true=data_test.sentimen,
+            y_pred=prediction_labels,
+            labels=[1, 0],
+            target_names=target_names,
+        )
+    )
+    df_cf_matrix_train = pd.DataFrame(cf_matrix_train, index = [i for i in ["Negative Tweets", "Positive Tweets"]],
+    columns = [i for i in ["Negative Tweets", "Positive Tweets"]])
 
+    plt.figure(figsize = (10,7))
+    sn.heatmap(cf_matrix_train, annot=True, cbar=False, fmt="d")
+    plt.savefig('confusion_matrix_train.jpg')
 
 def get_average_word2vec(tokens_list, vector, generate_missing=False, k=300):
     if len(tokens_list) < 1:
@@ -314,33 +366,35 @@ def get_word2vec_embeddings(vectors, clean_comments, generate_missing=False):
 
 
 def ConvNet(embeddings, max_sequence_length, num_words, embedding_dim, labels_index):
-
+    # input_dim: Integer. Size of the vocabulary, i.e. maximum integer index + 1.
+    # output_dim: Integer. Dimension of the dense embedding.
+    # input_length: Length of input sequences, when it is constant. This argument is required if you are going to connect Flatten then Dense layers upstream (without it, the shape of the dense outputs cannot be computed).
     embedding_layer = Embedding(
-        num_words,
-        embedding_dim,
+        input_dim=num_words,
+        output_dim=embedding_dim,
         weights=[embeddings],
         input_length=max_sequence_length,
         trainable=False,
     )
 
-    sequence_input = Input(shape=(max_sequence_length,), dtype="int32")
+    sequence_input = Input(shape=(max_sequence_length,), dtype="int64")
     embedded_sequences = embedding_layer(sequence_input)
 
     convs = []
-    filter_sizes = [2, 3, 4, 5, 6]
+    filter_sizes = [2, 4, 8, 16]
 
     for filter_size in filter_sizes:
-        l_conv = Conv1D(filters=200, kernel_size=filter_size, activation="relu")(
-            embedded_sequences
-        )
+        l_conv = Conv1D(
+            filters=embedding_dim, kernel_size=filter_size, activation="relu"
+        )(embedded_sequences)
         l_pool = GlobalMaxPooling1D()(l_conv)
         convs.append(l_pool)
 
     l_merge = concatenate(convs, axis=1)
-
     x = Dropout(0.1)(l_merge)
-    x = Dense(128, activation="relu")(x)
-    x = Dropout(0.2)(x)
+    x = Dense(200, activation="relu")(x)
+    #x = Dense(128, activation="relu")(x)
+    #x = Dense(8, activation="relu")(x)
     preds = Dense(labels_index, activation="sigmoid")(x)
 
     model = Model(sequence_input, preds)
@@ -352,62 +406,99 @@ def ConvNet(embeddings, max_sequence_length, num_words, embedding_dim, labels_in
 def load_model(total_row=29000, filename: str = None):
     import keras
     from keras.preprocessing.text import Tokenizer
-    # Word Cloud 
-    from wordcloud import WordCloud, STOPWORDS 
-    import matplotlib.pyplot as plt 
-    from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+
+    # Word Cloud
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import (
+        classification_report,
+        confusion_matrix,
+        ConfusionMatrixDisplay,
+    )
 
     df = pd.read_csv(filepath_or_buffer=filename, nrows=total_row)
-    data_train, data_test = train_test_split(df, test_size=0.1, random_state=42)
+    data_train, data_test = train_test_split(df, test_size=0.9, random_state=42)
 
-    all_training_words = [word for tokens in data_train["tokens"] for word in tokens]
+    all_training_words = [word for tokens in data_test["tokens"] for word in eval(tokens)]
     TRAINING_VOCAB = sorted(list(set(all_training_words)))
 
     tokenizer = Tokenizer(num_words=len(TRAINING_VOCAB), lower=True, char_level=False)
-    tokenizer.fit_on_texts(data_train["tokens"].tolist())
+    tokenizer.fit_on_texts(data_test["tokens"].tolist())
 
     model = keras.models.load_model("./model")
 
     test_sequences = tokenizer.texts_to_sequences(data_test["tokens"].tolist())
-    MAX_SEQUENCE_LENGTH = 50
+    MAX_SEQUENCE_LENGTH = 60
     test_cnn_data = pad_sequences(test_sequences, maxlen=MAX_SEQUENCE_LENGTH)
-    predictions = model.predict(test_cnn_data, batch_size=1000, verbose=1)
+    predictions: List[List[float, float]] = model.predict(test_cnn_data, batch_size=1000, verbose=1)
     labels = [1, 0]
-    prediction_labels = []
+    prediction_labels: List[int] = []
+    print("$ Total Prediction : ", len(predictions))
+    print("Label : [1,0] =====> [positif , negatif]")
+    print("Sample prediction without normalize", predictions[0:5])
     for p in predictions:
         prediction_labels.append(labels[np.argmax(p)])
-
+    print("Sample prediction normalize", prediction_labels[0:5])
+    print("Data Set Validation -  Sentimen Value :", (data_test.sentimen.tolist())[0:5])
+    print("Data Set Validation -  tweet Value :", (data_test.tweet_final.tolist())[0:5])
     print(
-        ">> Hasil >> ",
+        "Accuracy: ",
         sum(data_test.sentimen == prediction_labels) / len(prediction_labels),
     )
     print("Total Data : ", data_test.sentimen.value_counts())
+    print("Total prediction", len(prediction_labels))
 
     # Confusion Matrix
     y_pred = np.argmax(predictions, axis=1)
     print("Confusion Matrix")
-    x1, x2, y1, y2 = (confusion_matrix(y_true=data_test.sentimen.tolist(), y_pred=y_pred, labels=[0,1])).ravel()
-    print("FN : ", x1)
-    print("TN : ", x2)
-    print("TP : ", y1)
-    print("FP : ", y2)
+    (tn, fp, fn, tp) = (
+        confusion_matrix(
+            y_true=data_test.sentimen.tolist(), y_pred=prediction_labels, labels=[1, 0]
+        )
+    ).ravel()
+    cf_matrix_testing = (
+        confusion_matrix(
+            y_true=data_test.sentimen.tolist(), y_pred=prediction_labels, labels=[1, 0]
+        )
+    )
+    print("(tp, fn, fp, tn)", (tn, fp, fn, tp))
     target_names = ["Positive", "Negative"]
-    print(classification_report(y_true=data_test.sentimen, y_pred=y_pred, labels=[0,1], target_names=target_names))
+    print(
+        classification_report(
+            y_true=data_test.sentimen,
+            y_pred=prediction_labels,
+            labels=[1, 0],
+            target_names=target_names,
+        )
+    )
+    import seaborn as sn
+    df_cf_matrix_testing = pd.DataFrame(cf_matrix_testing, index = [i for i in ["Negative Tweets", "Positive Tweets"]],
+    columns = [i for i in ["Negative Tweets", "Positive Tweets"]])
 
-    # Wordcloud 
-    comment_words = '' 
-    stopwords = set(STOPWORDS)  
-    comment_words += " ".join(df.tokens)+" "
-    print(len(comment_words)) 
-    wordcloud = WordCloud(width = 800, height = 800, 
-                background_color ='white', 
-                stopwords = stopwords, 
-                min_font_size = 10, collocations=False).generate(comment_words) 
-    plt.figure(figsize = (8, 8), facecolor = None) 
-    plt.imshow(wordcloud) 
-    plt.axis("off") 
-    plt.tight_layout(pad = 0) 
-    plt.savefig("graph_word_cloud.png") 
+    plt.figure(figsize = (10,7))
+    sn.heatmap(cf_matrix_testing, annot=True, cbar=False, fmt="d")
+    plt.savefig('confusion_matrix_validation.jpg')
+
+
+    # Wordcloud
+    from wordcloud import WordCloud, STOPWORDS
+
+    comment_words = ""
+    stopwords = set(STOPWORDS)
+    comment_words += " ".join(df.tokens) + " "
+    print(len(comment_words))
+    wordcloud = WordCloud(
+        width=800,
+        height=800,
+        background_color="white",
+        stopwords=stopwords,
+        min_font_size=10,
+        collocations=False,
+    ).generate(comment_words)
+    plt.figure(figsize=(8, 8), facecolor=None)
+    plt.imshow(wordcloud)
+    plt.axis("off")
+    plt.tight_layout(pad=0)
+    plt.savefig("graph_word_cloud.png")
     plt.close()
 
     # # Visualize | Confussion Matrix
@@ -420,12 +511,14 @@ def load_model(total_row=29000, filename: str = None):
     # c.bar(label_positive=, predict_positive=, label_negative=, predict_negative=)
 
 
+# tampilan bab 4
 def write_vector_to_csv(filename: str = None) -> None:
     df = pd.read_csv(filepath_or_buffer=filename)
     df["preprocess_vector"] = df["tokens"]
     print("preprocess_vector")
     from keras.preprocessing.text import Tokenizer
     from keras.preprocessing.sequence import pad_sequences
+
     tokenizer = Tokenizer(num_words=100000)
     tokenizer.fit_on_texts((df["preprocess_vector"]).tolist())
     sequences = tokenizer.texts_to_sequences((df["preprocess_vector"]).tolist())
@@ -446,15 +539,18 @@ def write_vector_to_csv(filename: str = None) -> None:
             "positive",
             "negative",
             "sentimen",
-            "preprocess_vector"
+            "preprocess_vector",
         ]
     ]
     df.to_csv("result_preprocess_old.csv")
 
-def preprocess_weigh_label(filename: str="result_preprocess_old.csv", total_thread: int=4):
+
+def preprocess_weigh_label(
+    filename: str = "result_preprocess_old.csv", total_thread: int = 4
+):
     # Read
     df = pd.read_csv(filepath_or_buffer=filename)
-    
+
     # Positive Negative Words
     file_name_positive_label: str = "./positif_ta2.txt"
     file_name_negative_label: str = "./negatif_ta2.txt"
@@ -474,7 +570,7 @@ def preprocess_weigh_label(filename: str="result_preprocess_old.csv", total_thre
     #     clean_tweet.append(_remove_numeric(str(x)))
     # df["tweet_final"] = clean_tweet
 
-    # Temporary | Join Tweet Final 
+    # Temporary | Join Tweet Final
     # tweet_final_temp: List[str] = list()
     # for index, x in enumerate(df.tweet_final):
     #     x = (x.replace("[", "").replace("]", "").replace("\"", "").replace("\'", "").replace(",", ""))
@@ -524,9 +620,11 @@ def preprocess_weigh_label(filename: str="result_preprocess_old.csv", total_thre
 
     df.to_csv("result_preprocess_old.csv")
 
-def _remove_numeric(tweet: str= None) -> str: 
-    pattern = '[0-9]'
-    return [re.sub(pattern, '', i) for i in tweet.split()] 
+
+def _remove_numeric(tweet: str = None) -> str:
+    pattern = "[0-9]"
+    return [re.sub(pattern, "", i) for i in tweet.split()]
+
 
 def draw_sentiment_and_most_word(filename: str = None, total_row: int = 0):
     import matplotlib.pyplot as plt
@@ -550,14 +648,9 @@ def draw_sentiment_and_most_word(filename: str = None, total_row: int = 0):
     plt.clf()
 
     # Additional | Draw Sentiment Into Graph
-    
 
-    total_negative_tweets: int = len(
-        [x for x in df["sentimen"] if x == 0]
-    )
-    total_positive_tweets: int = len(
-        [x for x in df["sentimen"] if x != 0]
-    )
+    total_negative_tweets: int = len([x for x in df["sentimen"] if x == 0])
+    total_positive_tweets: int = len([x for x in df["sentimen"] if x != 0])
 
     df_bar = pd.Series(
         data=[total_negative_tweets, total_positive_tweets],
@@ -573,12 +666,29 @@ def draw_sentiment_and_most_word(filename: str = None, total_row: int = 0):
     plt.savefig("graph_sentiment_bar_chart.jpg")
     plt.clf()
 
+def balancing_csv_by_sentimen(filename: str = None, output_file: str=None):
+    df = pd.read_csv(filepath_or_buffer=filename)
+    df_sentimen_positif = df.loc[df['sentimen'] == 1]
+    df_sentimen_negatif = df.loc[df['sentimen'] == 0]
+    print(df_sentimen_positif.shape[0])
+    print(df_sentimen_negatif.shape[0])
+    minimal_row = min(int(df_sentimen_positif.shape[0]), int(df_sentimen_negatif.shape[0]))
+    df_sentimen_negatif = df_sentimen_negatif[0:minimal_row]
+    df_sentimen_positif = df_sentimen_positif[0:minimal_row]
+    print(df_sentimen_positif.shape[0])
+    print(df_sentimen_negatif.shape[0])
+    combined_df = pd.concat([df_sentimen_positif, df_sentimen_negatif])
+    print(combined_df.shape)
+    combined_df.to_csv(output_file)
+
 if __name__ == "__main__":
     start_time = time.time()
-    draw_sentiment_and_most_word(total_row=10000, filename="result_preprocess_old.csv")
-    preprocess(total_row=12000, total_thread_processor=4)
-    #preprocess_weigh_label()
-    #write_vector_to_csv(filename="result_preprocess_old.csv")
-    #training(total_row=10000, embedding_dim=8, batch_size=64, num_epochs=3)
-    # load_model(total_row=10000, filename="result_preprocess_old.csv")
+    #balancing_csv_by_sentimen(filename="dataset_train_and_validation.csv",output_file="dataset_train_and_validation_balance.csv")
+    #balancing_csv_by_sentimen(filename="dataset_test.csv",output_file="dataset_test_balance.csv")
+    # draw_sentiment_and_most_word(total_row=10000, filename="result_preprocess_old.csv")
+    #preprocess(total_row=87000, total_thread_processor=4,file_name_input="crawl_newest.csv")
+    # preprocess_weigh_label()
+    # write_vector_to_csv(filename="result_preprocess_old.csv")
+    #training(total_row=2776, embedding_dim=100, batch_size=8, num_epochs=10, filename="dataset_train_and_validation_balance.csv")
+    load_model(total_row=716, filename="dataset_test_balance.csv")
     print("--- %s seconds ---" % (time.time() - start_time))
